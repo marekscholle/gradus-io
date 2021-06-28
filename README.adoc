@@ -1,0 +1,9 @@
+# Gradus ad IO Parnassum
+
+Test https://asciidoctor.org/[Asciidoctor] text.
+
+[source, scala]
+----
+trait Runnable:
+  def execute(): Unit
+----
