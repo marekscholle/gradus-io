@@ -32,6 +32,8 @@ object Program4:
       f: A => Program4[B],
   ) extends Program4[B]
 
+  def suspend[A](program: () => Program4[A]) = Ready(()).flatMap(_ => program())
+
   def run1[A](program: Program4[A]): A =
     program match {
       case Ready(a) =>
@@ -50,11 +52,14 @@ object Program4:
 
   /** Chain of functions `A` -> `A1`, `A1` -> `A2`, ..., `A{n-1}` -> `A{n}` = `B` */
   sealed trait FunctionChain[A, B]:
-    def apply(a: A): B = FunctionChain.apply(this, a)
+    def apply(a: A): B =
+      logger.debug(s"functionChain.apply #${Thread.currentThread.getStackTrace.size}")
+      FunctionChain.apply(this, a)
 
   object FunctionChain:
     @tailrec
     private def apply[A, B](fseq: FunctionChain[A, B], a: A): B =
+      logger.debug(s"FunctionChain.apply #${Thread.currentThread.getStackTrace.size}")
       fseq match {
         case Single(f)      => f(a)
         case Nonempty(f, g) => apply(g, f(a))
@@ -66,11 +71,19 @@ object Program4:
 
   @tailrec
   def loop2[A, B](program: Program4[A], fseq: FunctionChain[A, B]): B =
+    logger.debug(s"loop2 #${Thread.currentThread.getStackTrace.size}")
     program match {
-      case Ready(a)         => fseq.apply(a)
-      case Exec(g)          => fseq.apply(g())
-      case Map(program1, g) => loop2(program1, FunctionChain.Nonempty(g, fseq))
+      case Ready(a) =>
+        logger.debug(s"ready #${Thread.currentThread.getStackTrace.size} $a")
+        fseq.apply(a)
+      case Exec(g) =>
+        logger.debug(s"exec #${Thread.currentThread.getStackTrace.size}")
+        fseq.apply(g())
+      case Map(program1, g) =>
+        logger.debug(s"map #${Thread.currentThread.getStackTrace.size}")
+        loop2(program1, FunctionChain.Nonempty(g, fseq))
       case FlatMap(program1, g) =>
+        logger.debug(s"flatMap #${Thread.currentThread.getStackTrace.size}")
         loop2(
           program1,
           FunctionChain.Nonempty(
@@ -81,6 +94,7 @@ object Program4:
     }
 
   def run2[A](program: Program4[A]): A =
+    logger.debug(s"run2 #${Thread.currentThread.getStackTrace.size}")
     loop2(program, FunctionChain.Single(identity))
 
   @tailrec
@@ -108,3 +122,33 @@ object Program4:
             run3(FlatMap(program11, a => FlatMap(g(a), f)))
         }
     }
+
+  val logger = LoggerFactory.getLogger(getClass)
+
+  /** Computes the length of (3n+1)-sequence for given `n`.
+    *
+    * https://en.wikipedia.org/wiki/Collatz_conjecture
+    */
+  def collatz(n: BigInt): Program4[BigInt] =
+    logger.debug(
+      s"called collatz($n), stack depth: ${Thread.currentThread.getStackTrace.size}",
+    )
+    suspend { () =>
+      logger.debug(s"collatz($n), stack depth: ${Thread.currentThread.getStackTrace.size}")
+      if (n == 1) Ready(0)
+      else {
+        if (n % 2 == 0) collatz(n / 2).map(_ + 1)
+        else collatz(3 * n + 1).map(_ + 1)
+      }
+    }
+
+  def print(n: BigInt) = Exec { () => println(s"Result: $n") }
+
+  @main def entry41(): Unit =
+    run1(collatz(18).flatMap(print))
+
+  @main def entry42(): Unit =
+    run2(collatz(5).flatMap(print))
+
+  @main def entry43(): Unit =
+    run3(collatz(18).flatMap(print))
