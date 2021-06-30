@@ -50,52 +50,35 @@ object Program4:
         run1(program2)
     }
 
-  /** Chain of functions `A` -> `A1`, `A1` -> `A2`, ..., `A{n-1}` -> `A{n}` = `B` */
-  sealed trait FunctionChain[A, B]:
-    def apply(a: A): B =
-      logger.debug(s"functionChain.apply #${Thread.currentThread.getStackTrace.size}")
-      FunctionChain.apply(this, a)
-
-  object FunctionChain:
-    @tailrec
-    private def apply[A, B](fseq: FunctionChain[A, B], a: A): B =
-      logger.debug(s"FunctionChain.apply #${Thread.currentThread.getStackTrace.size}")
-      fseq match {
-        case Single(f)      => f(a)
-        case Nonempty(f, g) => apply(g, f(a))
-      }
-
-    case class Single[A, B](f: A => B) extends FunctionChain[A, B]
-    case class Nonempty[A, C, B](f: A => C, g: FunctionChain[C, B])
-        extends FunctionChain[A, B]
+  sealed trait Todo[B]
+  case class More[A, B](program: Program4[A], todo: A => Todo[B]) extends Todo[B]
+  case class Done[B](b: B) extends Todo[B]
 
   @tailrec
-  def loop2[A, B](program: Program4[A], fseq: FunctionChain[A, B]): B =
-    logger.debug(s"loop2 #${Thread.currentThread.getStackTrace.size}")
+  def loop2[A, B](program: Program4[A], todo: A => Todo[B]): B =
     program match {
       case Ready(a) =>
-        logger.debug(s"ready #${Thread.currentThread.getStackTrace.size} $a")
-        fseq.apply(a)
+        todo(a) match {
+          case Done(b)             => b
+          case More(program, todo) => loop2(program, todo)
+        }
       case Exec(g) =>
-        logger.debug(s"exec #${Thread.currentThread.getStackTrace.size}")
-        fseq.apply(g())
-      case Map(program1, g) =>
-        logger.debug(s"map #${Thread.currentThread.getStackTrace.size}")
-        loop2(program1, FunctionChain.Nonempty(g, fseq))
-      case FlatMap(program1, g) =>
-        logger.debug(s"flatMap #${Thread.currentThread.getStackTrace.size}")
+        todo(g()) match {
+          case Done(b)             => b
+          case More(program, todo) => loop2(program, todo)
+        }
+      case Map(program, g) =>
+        loop2(program, x => todo(g(x)))
+      case FlatMap(program, g) =>
         loop2(
-          program1,
-          FunctionChain.Nonempty(
-            g, // A$4 => Program4[A]
-            FunctionChain.Nonempty(run2, fseq), // Program4[A] => A => B
-          ),
+          program,
+          x => More(g(x), todo),
         )
     }
 
   def run2[A](program: Program4[A]): A =
     logger.debug(s"run2 #${Thread.currentThread.getStackTrace.size}")
-    loop2(program, FunctionChain.Single(identity))
+    loop2(program, a => Done(a))
 
   @tailrec
   def run3[A](program: Program4[A]): A =
@@ -148,7 +131,7 @@ object Program4:
     run1(collatz(18).flatMap(print))
 
   @main def entry42(): Unit =
-    run2(collatz(5).flatMap(print))
+    run2(collatz(18).flatMap(print))
 
   @main def entry43(): Unit =
     run3(collatz(18).flatMap(print))
