@@ -2,8 +2,6 @@ package com.marekscholle.gradus
 
 import org.slf4j.LoggerFactory
 import scala.annotation.tailrec
-import com.marekscholle.gradus.Program4.FunctionChain.Nonempty
-import com.marekscholle.gradus.Program4.FunctionChain
 
 sealed trait Program4[A]:
   def map[B](f: A => B): Program4[B] = Program4.Map(this, f)
@@ -50,12 +48,18 @@ object Program4:
         run1(program2)
     }
 
+  /** Helper cases for [[run2]]. */
   sealed trait Todo[B]
-  case class More[A, B](program: Program4[A], todo: A => Todo[B]) extends Todo[B]
-  case class Done[B](b: B) extends Todo[B]
+  object Todo:
+    // note we reinvented FlatMap here
+    case class More[A, B](program: Program4[A], todo: A => Todo[B]) extends Todo[B]
+    // note we reinvented Ready here
+    case class Done[B](b: B) extends Todo[B]
 
+  /** Tail recursive loop for [[run2]]. */
   @tailrec
   def loop2[A, B](program: Program4[A], todo: A => Todo[B]): B =
+    import Todo._
     program match {
       case Ready(a) =>
         todo(a) match {
@@ -76,10 +80,13 @@ object Program4:
         )
     }
 
+  /** Tail recursive rewrite of [[run1]]. */
   def run2[A](program: Program4[A]): A =
-    logger.debug(s"run2 #${Thread.currentThread.getStackTrace.size}")
-    loop2(program, a => Done(a))
+    loop2(program, a => Todo.Done(a))
 
+  /** Formal rewrite [[run2]], this time using [[Ready]] for [[Todo.Done]] and [[FlatMap]]
+    * as [[Todo.More]].
+    */
   @tailrec
   def run3[A](program: Program4[A]): A =
     program match {
@@ -114,10 +121,10 @@ object Program4:
     */
   def collatz(n: BigInt): Program4[BigInt] =
     logger.debug(
-      s"called collatz($n), stack depth: ${Thread.currentThread.getStackTrace.size}",
+      s"called collatz($n) (stack depth ${Thread.currentThread.getStackTrace.size})",
     )
     suspend { () =>
-      logger.debug(s"collatz($n), stack depth: ${Thread.currentThread.getStackTrace.size}")
+      logger.debug(s"collatz($n) (stack depth ${Thread.currentThread.getStackTrace.size})")
       if (n == 1) Ready(0)
       else {
         if (n % 2 == 0) collatz(n / 2).map(_ + 1)
