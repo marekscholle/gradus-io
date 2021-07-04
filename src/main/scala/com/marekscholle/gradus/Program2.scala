@@ -1,6 +1,5 @@
 package com.marekscholle.gradus
 
-import org.slf4j.LoggerFactory
 import cats.instances.double
 
 /** Second version of code representation of a _program_.

@@ -1,6 +1,5 @@
 package com.marekscholle.gradus
 
-import org.slf4j.LoggerFactory
 import cats.instances.double
 
 /** The same as [[Program2]], but [[map]] and [[flatMap]] implementations are delegated to

@@ -1,6 +1,5 @@
 package com.marekscholle.gradus
 
-import org.slf4j.LoggerFactory
 import scala.annotation.tailrec
 
 sealed trait Program4[A]:
