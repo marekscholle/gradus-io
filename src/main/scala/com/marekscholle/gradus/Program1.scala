@@ -1,6 +1,6 @@
 package com.marekscholle.gradus
 
-/** First version of code representation of a _program_. */
+/** First version of programmatic representation of a _program_. */
 trait Program1:
   /** Executes arbitrary piece of code and returns "nothing".
     *
@@ -9,7 +9,7 @@ trait Program1:
     */
   def execute(): Unit
 
-  /** Program which first executes `this` program and then `that` program. */
+  /** Program which first executes `this` program and then the `that` program. */
   def andThen(that: Program1): Program1 =
     val self = this
     new Program1:
@@ -23,7 +23,7 @@ object Program1:
     * https://en.wikipedia.org/wiki/Collatz_conjecture
     */
   def collatz(n: BigInt): Program1 =
-    println(s"creating program collatz($n)")
+    println(s"collatz($n)")
     new Program1:
       def execute(): Unit =
         println(s"collatz($n): execute()")

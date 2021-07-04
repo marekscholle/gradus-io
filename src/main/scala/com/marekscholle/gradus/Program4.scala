@@ -8,55 +8,57 @@ sealed trait Program4[A]:
   def flatMap[B](f: A => Program4[B]): Program4[B] = Program4.FlatMap(this, f)
 
 object Program4:
-  /** Program which (when executed) returns already existing value. */
-  case class Ready[A](a: A) extends Program4[A]
+  /** Program which (when interpreted) returns an already existing value. */
+  private case class Ready[A](a: A) extends Program4[A]
 
-  /** Program which (when executed) runs the saved function `f` and returns its result. */
-  case class Exec[A](f: () => A) extends Program4[A]
-
-  /** Program which (when executed) runs the saved `program`, takes the result, applies `f`
-    * on it (i.e. re-maps the result of `program`), and returns its result.
+  /** Program which (when interpreted) runs the `program`, applies `f` on its result (i.e.
+    * re-maps the result of `program`), and returns its result.
     */
-  case class Map[A, B](
+  private case class Map[A, B](
       program: Program4[A],
       f: A => B,
   ) extends Program4[B]
 
-  /** Program which (when executed) runs the saved `program`, applies `f` on it to get
-    * another program, runs it and returns its result.
+  /** Program which (when interpreted) runs the `program`, applies `f` on its result to get
+    * an _another_ program, runs it and returns its result.
     */
-  case class FlatMap[A, B](
+  private case class FlatMap[A, B](
       program: Program4[A],
       f: A => Program4[B],
   ) extends Program4[B]
 
-  def suspend[A](program: () => Program4[A]) = Ready(()).flatMap(_ => program())
+  /** Program which (when interpreted) returns an already existing value. */
+  def ready[A](a: A): Program4[A] = Ready(a)
 
+  /** Program which (when interpreted) runs the function `f` and provides its result. */
+  def suspend[A](f: () => A): Program4[A] = Ready(()).map { _ => f() }
+
+  /** Program which (when interpreted) creates a program and runs it. */
+  def defer[A](program: () => Program4[A]) = Ready(()).flatMap { _ => program() }
+
+  /** Primitive [[Program4]] interpreter. */
   def run1[A](program: Program4[A]): A =
     program match {
       case Ready(a) =>
         a
-      case Exec(f) =>
-        f()
-      case Map(program1, f) =>
-        val a1 = run1(program1) // not a tail call
+
+      case Map(program, f) =>
+        val a1 = run1(program) // not a tail call
         f(a1)
 
-      case FlatMap(program1, f) =>
-        val a1 = run1(program1) // not a tail call
-        val program2 = f(a1)
-        run1(program2)
+      case FlatMap(program, f) =>
+        val a1 = run1(program) // not a tail call
+        val program1: Program4[A] = f(a1)
+        run1(program1)
     }
 
   /** Helper cases for [[run2]]. */
   sealed trait Todo[B]
   object Todo:
-    // note we reinvented FlatMap here
     case class More[A, B](program: Program4[A], todo: A => Todo[B]) extends Todo[B]
-    // note we reinvented Ready here
     case class Done[B](b: B) extends Todo[B]
 
-  /** Tail recursive loop for [[run2]]. */
+  /** Tail recursive helper for [[run2]]. */
   @tailrec
   def loop2[A, B](program: Program4[A], todo: A => Todo[B]): B =
     import Todo._
@@ -66,79 +68,64 @@ object Program4:
           case Done(b)             => b
           case More(program, todo) => loop2(program, todo)
         }
-      case Exec(g) =>
-        todo(g()) match {
-          case Done(b)             => b
-          case More(program, todo) => loop2(program, todo)
-        }
-      case Map(program, g) =>
-        loop2(program, x => todo(g(x)))
-      case FlatMap(program, g) =>
+
+      case Map(program, f) =>
+        loop2(program, x => todo(f(x)))
+
+      case FlatMap(program, f) =>
         loop2(
           program,
-          x => More(g(x), todo),
+          x => More(f(x), todo),
         )
     }
 
-  /** Tail recursive rewrite of [[run1]]. */
+  /** Better interpreter of [[Program4]] – tail recursive version of [[run1]]. */
   def run2[A](program: Program4[A]): A =
     loop2(program, a => Todo.Done(a))
 
   /** Formal rewrite [[run2]], this time using [[Ready]] for [[Todo.Done]] and [[FlatMap]]
-    * as [[Todo.More]].
+    * for [[Todo.More]].
     */
   @tailrec
-  def run3[A](program: Program4[A]): A =
+  def run[A](program: Program4[A]): A =
     program match {
       case Ready(a) =>
         a
 
-      case Exec(f) =>
-        f()
+      case Map(program, f) =>
+        val program1 = program.flatMap { a => Ready(f(a)) }
+        run(program1)
 
-      case Map(program1, f) =>
-        val program2 = program1.flatMap(a => Ready(f(a)))
-        run3(program2)
-
-      case FlatMap(program1, f) =>
-        program1 match {
+      case FlatMap(program, f) =>
+        program match {
           case Ready(a) =>
-            run3(f(a))
-          case Exec(g) =>
-            run3(f(g()))
-          case Map(program11, g) =>
-            run3(FlatMap(program11, g andThen f))
-          case FlatMap(program11, g) =>
-            run3(FlatMap(program11, a => FlatMap(g(a), f)))
+            run(f(a))
+          case Map(program1, g) =>
+            run(FlatMap(program1, a1 => f(g(a1))))
+          case FlatMap(program1, g) =>
+            run(FlatMap(program1, a1 => FlatMap(g(a1), f)))
         }
     }
 
-  val logger = LoggerFactory.getLogger(getClass)
-
-  /** Computes the length of (3n+1)-sequence for given `n`.
-    *
-    * https://en.wikipedia.org/wiki/Collatz_conjecture
-    */
+  /** Computes the length of (3n+1)-sequence for given `n`. */
   def collatz(n: BigInt): Program4[BigInt] =
-    logger.debug(
-      s"called collatz($n) (stack depth ${Thread.currentThread.getStackTrace.size})",
-    )
-    suspend { () =>
-      logger.debug(s"collatz($n) (stack depth ${Thread.currentThread.getStackTrace.size})")
-      if (n == 1) Ready(0)
+    println(s"collatz($n) [${Thread.currentThread.getStackTrace.size}]")
+    defer { () =>
+      println(s"deferred collatz($n) [${Thread.currentThread.getStackTrace.size}]")
+      if (n == 1) ready(0)
       else {
         if (n % 2 == 0) collatz(n / 2).map(_ + 1)
         else collatz(3 * n + 1).map(_ + 1)
       }
     }
 
-  def print(n: BigInt) = Exec { () => println(s"Result: $n") }
+  def printResult(n: BigInt) = suspend { () => println(s"Result: $n") }
 
   @main def entry41(): Unit =
-    run1(collatz(18).flatMap(print))
+    run1(collatz(18).flatMap(printResult))
 
   @main def entry42(): Unit =
-    run2(collatz(18).flatMap(print))
+    run2(collatz(18).flatMap(printResult))
 
   @main def entry43(): Unit =
-    run3(collatz(18).flatMap(print))
+    run(collatz(18).flatMap(printResult))

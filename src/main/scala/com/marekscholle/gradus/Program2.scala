@@ -5,7 +5,7 @@ import cats.instances.double
 
 /** Second version of code representation of a _program_.
   *
-  * Unlike [[Program1]], this allows the program to return a value.
+  * Unlike [[Program1]], this allows a program to return a value.
   */
 trait Program2[A]:
   /** Executes arbitrary piece of code and returns value of type `A`.
@@ -14,7 +14,7 @@ trait Program2[A]:
     * https://docs.oracle.com/en/java/javase/16/docs/api/java.base/java/util/function/Supplier.html
     *
     * As with [[java.lnag.Supplier]], there is no requirement that a new or distinct result
-    * be returned each time the supplier is invoked.
+    * be returned each time the program is invoked.
     */
   def execute(): A
 
@@ -36,16 +36,15 @@ trait Program2[A]:
     new Program2[B]:
       def execute(): B =
         val a = self.execute()
-        f(a).execute()
+        val pb = f(a)
+        pb.execute()
 
 object Program2:
-  val logger = LoggerFactory.getLogger(getClass)
-
   /** Executes given program. */
-  def run[A](program2: Program2[A]): Unit =
+  def run[A](program2: Program2[A]): A =
     program2.execute()
 
-  /** Program which returns already existing value `a`. */
+  /** Program which returns an already existing value. */
   def ready[A](a: A): Program2[A] =
     new Program2:
       def execute(): A = a
@@ -55,24 +54,21 @@ object Program2:
     * https://en.wikipedia.org/wiki/Collatz_conjecture
     */
   def collatz(n: BigInt): Program2[BigInt] =
-    logger.debug(s"new collatz($n)")
-    def loop(n: BigInt, length: BigInt): Program2[BigInt] =
-      logger.debug(s"new collatz.loop($n, $length)")
-      new Program2:
-        def execute(): BigInt =
-          logger.debug(
-            s"collatz.loop($n, $length).execute()" +
-              s", stack depth: ${Thread.currentThread.getStackTrace.size}"
-          )
-          if (n == 1) length
-          else
-            val c =
-              if (n % 2 == 0) loop(n / 2, length + 1)
-              else loop(3 * n + 1, length + 1)
-            c.execute()
-    loop(n, length = 0)
+    println(s"collatz($n)")
+    new Program2:
+      def execute(): BigInt =
+        println(
+          s"collatz($n).execute()" +
+            s", stack depth: ${Thread.currentThread.getStackTrace.size}",
+        )
+        if (n == 1) 0
+        else
+          val c =
+            if (n % 2 == 0) collatz(n / 2)
+            else collatz(3 * n + 1)
+          c.map(_ + 1).execute()
 
-  /** (Program which) Prints `a` to console with given `label`. */
+  /** Program which prints `a` with given `label`. */
   def print[A](label: String, a: A): Program2[Unit] =
     new Program2:
       def execute(): Unit =

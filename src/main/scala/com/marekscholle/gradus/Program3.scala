@@ -3,18 +3,21 @@ package com.marekscholle.gradus
 import org.slf4j.LoggerFactory
 import cats.instances.double
 
+/** The same as [[Program2]], but [[map]] and [[flatMap]] implementations are delegated to
+  * functions in companion object.
+  */
 trait Program3[A]:
   def execute(): A
   def map[B](f: A => B): Program3[B] = Program3.map(this, f)
   def flatMap[B](f: A => Program3[B]): Program3[B] = Program3.flatMap(this, f)
 
 object Program3:
-  /** Program which returns already existing value `a`. */
+  /** Program which returns an already existing value. */
   def ready[A](a: A): Program3[A] =
     new Program3:
       def execute(): A = a
 
-  /** The implementation of [[Program2.map]], as a named class. */
+  /** The implementation of [[Program3.map]]. */
   def map[A, B](
       program: Program3[A],
       f: A => B,
@@ -22,7 +25,7 @@ object Program3:
     new Program3:
       def execute(): B = f(program.execute())
 
-  /** The implementation of [[Program2.flatMap]], as a named class. */
+  /** The implementation of [[Program3.flatMap]]. */
   def flatMap[A, B](
       program: Program3[A],
       f: A => Program3[B],
