@@ -2,11 +2,18 @@ package com.marekscholle.gradus
 
 import scala.annotation.tailrec
 
+/** Similar to [[Program2]] or [[Program3]], but leaves the program execution to an
+  * interpreter; relieves [[Program4]] from ability to execute itself.
+  */
 sealed trait Program4[A]:
   def map[B](f: A => B): Program4[B] = Program4.Map(this, f)
   def flatMap[B](f: A => Program4[B]): Program4[B] = Program4.FlatMap(this, f)
 
 object Program4:
+  // +--------------------------------+
+  // + Implementations of `Program4`. |
+  // +--------------------------------+
+
   /** Program which (when interpreted) returns an already existing value. */
   private case class Ready[A](a: A) extends Program4[A]
 
@@ -26,6 +33,10 @@ object Program4:
       f: A => Program4[B],
   ) extends Program4[B]
 
+  // +---------------------------+
+  // | Factories for `Program4`. |
+  // +---------------------------+
+
   /** Program which (when interpreted) returns an already existing value. */
   def ready[A](a: A): Program4[A] = Ready(a)
 
@@ -35,7 +46,11 @@ object Program4:
   /** Program which (when interpreted) creates a program and runs it. */
   def defer[A](program: () => Program4[A]) = Ready(()).flatMap { _ => program() }
 
-  /** Primitive [[Program4]] interpreter. */
+  // +------------------------------+
+  // | Interpreters for `Program4`. |
+  // +------------------------------+
+
+  /** Naive [[Program4]] interpreter. */
   def run1[A](program: Program4[A]): A =
     program match {
       case Ready(a) =>
@@ -82,8 +97,8 @@ object Program4:
   def run2[A](program: Program4[A]): A =
     loop2(program, a => Todo.Done(a))
 
-  /** Formal rewrite [[run2]], this time using [[Ready]] for [[Todo.Done]] and [[FlatMap]]
-    * for [[Todo.More]].
+  /** Formal rewrite [[run2]], using [[Ready]] for [[Todo.Done]] and [[FlatMap]] for
+    * [[Todo.More]].
     */
   @tailrec
   def run[A](program: Program4[A]): A =
@@ -106,25 +121,32 @@ object Program4:
         }
     }
 
-  /** Computes the length of (3n+1)-sequence for given `n`. */
-  def collatz(n: BigInt): Program4[BigInt] =
-    println(s"collatz($n) [${Thread.currentThread.getStackTrace.size}]")
-    defer { () =>
-      println(s"deferred collatz($n) [${Thread.currentThread.getStackTrace.size}]")
-      if (n == 1) ready(0)
-      else {
-        if (n % 2 == 0) collatz(n / 2).map(_ + 1)
-        else collatz(3 * n + 1).map(_ + 1)
-      }
+// +--------------------+
+// | Example `Program4` |
+// +--------------------+
+
+import com.marekscholle.gradus.{Program4 => P}
+
+/** Computes the length of (3n+1)-sequence for given `n`. */
+def collatz(n: BigInt): P[BigInt] =
+  println(s"collatz($n) [${Thread.currentThread.getStackTrace.size}]")
+  P.defer { () =>
+    println(s"deferred collatz($n) [${Thread.currentThread.getStackTrace.size}]")
+    if (n == 1) P.ready(0)
+    else {
+      if (n % 2 == 0) collatz(n / 2).map(_ + 1)
+      else collatz(3 * n + 1).map(_ + 1)
     }
+  }
 
-  def printResult(n: BigInt) = suspend { () => println(s"Result: $n") }
+/** Prints result `n` to console. */
+def printResult(n: BigInt) = P.suspend { () => println(s"Result: $n") }
 
-  @main def entry41(): Unit =
-    run1(collatz(18).flatMap(printResult))
+@main def entry41(): Unit =
+  P.run1(collatz(18).flatMap(printResult))
 
-  @main def entry42(): Unit =
-    run2(collatz(18).flatMap(printResult))
+@main def entry42(): Unit =
+  P.run2(collatz(18).flatMap(printResult))
 
-  @main def entry43(): Unit =
-    run(collatz(18).flatMap(printResult))
+@main def entry43(): Unit =
+  P.run(collatz(18).flatMap(printResult))

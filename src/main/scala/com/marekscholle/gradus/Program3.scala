@@ -22,7 +22,9 @@ object Program3:
       f: A => B,
   ): Program3[B] =
     new Program3:
-      def execute(): B = f(program.execute())
+      def execute(): B =
+        val a = program.execute()
+        f(a)
 
   /** The implementation of [[Program3.flatMap]]. */
   def flatMap[A, B](
