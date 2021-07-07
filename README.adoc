@@ -434,7 +434,7 @@ problem
 (https://en.wikipedia.org/wiki/Collatz_conjecture[Collatz conjecture])
 which goes this way: given a positive number `n`,
 if it is odd, mutliply it by 3 and add 1
-(hence the name _3n + 1 problem_) and repeat,
+(hence the name _`3n + 1` problem_) and repeat,
 if it is even, divide by 2 and repeat.
 The Collatz conjecture states that for every starting `n`,
 you will eventually reach the cycle 1, 2, 4.
