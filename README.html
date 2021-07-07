@@ -1014,15 +1014,15 @@ but are not equal as object instances.</p>
 As an example we take a well known recursive
 problem
 (<a href="https://en.wikipedia.org/wiki/Collatz_conjecture">Collatz conjecture</a>)
-which goes this way: given a positive number \(n\),
+which goes this way: given a positive number <code>n</code>,
 if it is odd, mutliply it by 3 and add 1
-(hence the name <em>\(3n + 1\) problem</em>) and repeat,
+(hence the name <em>3n + 1 problem</em>) and repeat,
 if it is even, divide by 2 and repeat.
-The Collatz conjecture states that for every starting \(n\),
-you will eventually reach the cycle \(1, 2, 4\).
-Let&#8217;s implement a program which, for given \(n\),
+The Collatz conjecture states that for every starting <code>n</code>,
+you will eventually reach the cycle 1, 2, 4.
+Let&#8217;s implement a program which, for given <code>n</code>,
 computes the number of steps until the sequence reaches 1.
-(Example: for \(n = 6\), the sequence is \(3, 10, 5, 16, 8, 4, 2, 1\)
+(Example: for <code>n</code> = 6, the sequence is 3, 10, 5, 16, 8, 4, 2, 1
 and hence the result is 8).</p>
 </div>
 <div class="listingblock">
@@ -1051,8 +1051,8 @@ for printing a labeled value:</p>
 </div>
 </div>
 <div class="paragraph">
-<p>The program which, for given \(n\), computes the lenght of
-\(3n + 1\) sequence and prints its length, is</p>
+<p>The program which, for given <code>n</code>, computes the lenght of
+<code>3n + 1</code> sequence and prints its length, is</p>
 </div>
 <div class="listingblock">
 <div class="content">
@@ -1065,7 +1065,7 @@ for printing a labeled value:</p>
 we will see <code>length(6): 8</code> as expected.
 As you can observe (or verify),
 this implementation extensively uses stack
-(you would need to find a very large \(n\) to overflow the stack though).
+(you would need to find a very large <code>n</code> to overflow the stack though).
 Moreover, the implementation is hardly in any sense better than plain</p>
 </div>
 <div class="listingblock">
@@ -1477,13 +1477,14 @@ program
 <p>This is sometimes called the <em>associativy (monad) law</em> since we can
 symbolically write equivalence</p>
 </div>
-<div class="stemblock">
+<div class="listingblock">
 <div class="content">
-\[\big[p \twoheadrightarrow \big(c \mapsto g(c)\big) \big] \twoheadrightarrow \big(b \mapsto f(b)\big) \equiv p \twoheadrightarrow \Big[ c \mapsto \Big(g(c) \twoheadrightarrow \big(b \mapsto f(b)\big)\Big) \Big]\]
+<pre class="highlightjs highlight"><code class="language-scala hljs" data-lang="scala">[p &gt;&gt;= (c -&gt; g(c))] &gt;&gt;= (b -&gt; f(b)) ===
+        p &gt;&gt;= [c -&gt; (g(c) &gt;&gt;= (b -&gt; f(b)))]</code></pre>
 </div>
 </div>
 <div class="paragraph">
-<p>where \(\twoheadrightarrow\) stands for <code>flatMap</code></p>
+<p>where <code>&gt;&gt;=</code> stands for <code>flatMap</code></p>
 </div>
 </div>
 </div>
@@ -1492,7 +1493,7 @@ symbolically write equivalence</p>
 <div id="footer">
 <div id="footer-text">
 Version 0.1<br>
-Last updated 2021-07-07 22:16:37 +0200
+Last updated 2021-07-07 22:28:33 +0200
 </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.18.3/highlight.min.js"></script>

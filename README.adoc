@@ -432,15 +432,15 @@ Let us write a simple program using our `Program2`.
 As an example we take a well known recursive
 problem
 (https://en.wikipedia.org/wiki/Collatz_conjecture[Collatz conjecture])
-which goes this way: given a positive number stem:[n],
+which goes this way: given a positive number `n`,
 if it is odd, mutliply it by 3 and add 1
-(hence the name _stem:[3n + 1] problem_) and repeat,
+(hence the name _3n + 1 problem_) and repeat,
 if it is even, divide by 2 and repeat.
-The Collatz conjecture states that for every starting stem:[n],
-you will eventually reach the cycle stem:[1, 2, 4].
-Let's implement a program which, for given stem:[n],
+The Collatz conjecture states that for every starting `n`,
+you will eventually reach the cycle 1, 2, 4.
+Let's implement a program which, for given `n`,
 computes the number of steps until the sequence reaches 1.
-(Example: for stem:[n = 6], the sequence is stem:[3, 10, 5, 16, 8, 4, 2, 1]
+(Example: for `n` = 6, the sequence is 3, 10, 5, 16, 8, 4, 2, 1
 and hence the result is 8).
 
 [source, scala]
@@ -467,8 +467,8 @@ def print[A](label: String, a: A): Program2[Unit] =
       println(s"$label: $a")
 ----
 
-The program which, for given stem:[n], computes the lenght of
-stem:[3n + 1] sequence and prints its length, is
+The program which, for given `n`, computes the lenght of
+`3n + 1` sequence and prints its length, is
 
 [source, scala]
 ----
@@ -480,7 +480,7 @@ When we `execute` the program `collatzAndPrint(8)`,
 we will see `length(6): 8` as expected.
 As you can observe (or verify),
 this implementation extensively uses stack
-(you would need to find a very large stem:[n] to overflow the stack though).
+(you would need to find a very large `n` to overflow the stack though).
 Moreover, the implementation is hardly in any sense better than plain
 
 [source, scala]
@@ -859,9 +859,10 @@ program
 This is sometimes called the _associativy (monad) law_ since we can
 symbolically write equivalence
 
-[stem]
-++++
-\big[p \twoheadrightarrow \big(c \mapsto g(c)\big) \big] \twoheadrightarrow \big(b \mapsto f(b)\big) \equiv p \twoheadrightarrow \Big[ c \mapsto \Big(g(c) \twoheadrightarrow \big(b \mapsto f(b)\big)\Big) \Big]
-++++
+[source, scala]
+----
+[p >>= (c -> g(c))] >>= (b -> f(b)) ===
+        p >>= [c -> (g(c) >>= (b -> f(b)))]
+----
 
-where stem:[\twoheadrightarrow] stands for `flatMap`
+where `>>=` stands for `flatMap`
