@@ -1,7 +1,5 @@
 package com.marekscholle.gradus
 
-import cats.instances.double
-
 /** The same as [[Program2]], but [[map]] and [[flatMap]] implementations are delegated to
   * functions in companion object.
   */
@@ -23,8 +21,7 @@ object Program3:
   ): Program3[B] =
     new Program3:
       def execute(): B =
-        val a = program.execute()
-        f(a)
+        f(program.execute())
 
   /** The implementation of [[Program3.flatMap]]. */
   def flatMap[A, B](

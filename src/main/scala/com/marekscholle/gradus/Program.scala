@@ -3,56 +3,56 @@ package com.marekscholle.gradus
 import scala.annotation.tailrec
 
 /** Similar to [[Program2]] or [[Program3]], but leaves the program execution to an
-  * interpreter; relieves [[Program4]] from ability to execute itself.
+  * interpreter; relieves [[Program]] from obligation to be able to execute itself.
   */
-sealed trait Program4[A]:
-  def map[B](f: A => B): Program4[B] = Program4.Map(this, f)
-  def flatMap[B](f: A => Program4[B]): Program4[B] = Program4.FlatMap(this, f)
+sealed trait Program[A]:
+  def map[B](f: A => B): Program[B] = Program.Map(this, f)
+  def flatMap[B](f: A => Program[B]): Program[B] = Program.FlatMap(this, f)
 
-object Program4:
+object Program:
   // +--------------------------------+
   // + Implementations of `Program4`. |
   // +--------------------------------+
 
   /** Program which (when interpreted) returns an already existing value. */
-  private case class Ready[A](a: A) extends Program4[A]
+  private case class Ready[A](a: A) extends Program[A]
 
   /** Program which (when interpreted) runs the `program`, applies `f` on its result (i.e.
     * re-maps the result of `program`), and returns its result.
     */
   private case class Map[A, B](
-      program: Program4[A],
+      program: Program[A],
       f: A => B,
-  ) extends Program4[B]
+  ) extends Program[B]
 
   /** Program which (when interpreted) runs the `program`, applies `f` on its result to get
-    * an _another_ program, runs it and returns its result.
+    * an another program, runs it and returns its result.
     */
   private case class FlatMap[A, B](
-      program: Program4[A],
-      f: A => Program4[B],
-  ) extends Program4[B]
+      program: Program[A],
+      f: A => Program[B],
+  ) extends Program[B]
 
   // +---------------------------+
   // | Factories for `Program4`. |
   // +---------------------------+
 
   /** Program which (when interpreted) returns an already existing value. */
-  def ready[A](a: A): Program4[A] = Ready(a)
+  def ready[A](a: A): Program[A] = Ready(a)
 
-  /** Program which (when interpreted) runs the function `f` and provides its result. */
-  def suspend[A](f: () => A): Program4[A] = Ready(()).map { _ => f() }
+  /** Program which (when interpreted) runs the function `f` and returns its result. */
+  def suspend[A](f: () => A): Program[A] = ready(()).map { _ => f() }
 
   /** Program which (when interpreted) creates a program and runs it. */
-  def defer[A](program: () => Program4[A]) = Ready(()).flatMap { _ => program() }
+  def defer[A](program: () => Program[A]) = ready(()).flatMap { _ => program() }
 
   // +------------------------------+
   // | Interpreters for `Program4`. |
   // +------------------------------+
 
   /** Naive [[Program4]] interpreter. */
-  def run1[A](program: Program4[A]): A =
-    program match {
+  def run1[A](program: Program[A]): A =
+    program match
       case Ready(a) =>
         a
 
@@ -62,19 +62,18 @@ object Program4:
 
       case FlatMap(program, f) =>
         val a1 = run1(program) // not a tail call
-        val program1: Program4[A] = f(a1)
+        val program1: Program[A] = f(a1)
         run1(program1)
-    }
 
   /** Helper cases for [[run2]]. */
   sealed trait Todo[B]
   object Todo:
-    case class More[A, B](program: Program4[A], todo: A => Todo[B]) extends Todo[B]
+    case class More[A, B](program: Program[A], todo: A => Todo[B]) extends Todo[B]
     case class Done[B](b: B) extends Todo[B]
 
   /** Tail recursive helper for [[run2]]. */
   @tailrec
-  def loop2[A, B](program: Program4[A], todo: A => Todo[B]): B =
+  def loop2[A, B](program: Program[A], todo: A => Todo[B]): B =
     import Todo._
     program match {
       case Ready(a) =>
@@ -93,46 +92,42 @@ object Program4:
         )
     }
 
-  /** Better interpreter of [[Program4]] – tail recursive version of [[run1]]. */
-  def run2[A](program: Program4[A]): A =
+  /** Better interpreter of [[Program]] – tail recursive version of [[run1]]. */
+  def run2[A](program: Program[A]): A =
     loop2(program, a => Todo.Done(a))
 
   /** Formal rewrite [[run2]], using [[Ready]] for [[Todo.Done]] and [[FlatMap]] for
     * [[Todo.More]].
     */
   @tailrec
-  def run[A](program: Program4[A]): A =
+  def run[A](program: Program[A]): A =
     program match {
       case Ready(a) =>
         a
 
-      case Map(program, f) =>
-        val program1 = program.flatMap { a => Ready(f(a)) }
-        run(program1)
-
       case FlatMap(program, f) =>
-        program match {
+        program match
           case Ready(a) =>
             run(f(a))
           case Map(program1, g) =>
             run(FlatMap(program1, a1 => f(g(a1))))
           case FlatMap(program1, g) =>
             run(FlatMap(program1, a1 => FlatMap(g(a1), f)))
-        }
     }
 
 // +--------------------+
-// | Example `Program4` |
+// | Example `Program` |
 // +--------------------+
 
-import com.marekscholle.gradus.{Program4 => P}
-
 /** Computes the length of (3n+1)-sequence for given `n`. */
-def collatz(n: BigInt): P[BigInt] =
-  println(s"collatz($n) [${Thread.currentThread.getStackTrace.size}]")
-  P.defer { () =>
-    println(s"deferred collatz($n) [${Thread.currentThread.getStackTrace.size}]")
-    if (n == 1) P.ready(0)
+def collatz(n: BigInt): Program[BigInt] =
+  def stackDepth = Thread.currentThread.getStackTrace.size
+
+  println(s"collatz($n) [${stackDepth}]")
+  Program.defer { () =>
+    println(s"deferred collatz($n) [${stackDepth}]")
+    if (n == 1)
+      Program.ready(0)
     else {
       if (n % 2 == 0) collatz(n / 2).map(_ + 1)
       else collatz(3 * n + 1).map(_ + 1)
@@ -140,13 +135,13 @@ def collatz(n: BigInt): P[BigInt] =
   }
 
 /** Prints result `n` to console. */
-def printResult(n: BigInt) = P.suspend { () => println(s"Result: $n") }
+def printResult(n: BigInt) = Program.suspend { () => println(s"Result: $n") }
 
 @main def entry41(): Unit =
-  P.run1(collatz(18).flatMap(printResult))
+  Program.run1(collatz(6).flatMap(printResult))
 
 @main def entry42(): Unit =
-  P.run2(collatz(18).flatMap(printResult))
+  Program.run2(collatz(6).flatMap(printResult))
 
 @main def entry43(): Unit =
-  P.run(collatz(18).flatMap(printResult))
+  Program.run(collatz(18).flatMap(printResult))

@@ -17,8 +17,8 @@ trait Program2[A]:
     */
   def execute(): A
 
-  /** Program which executes `this` program, passes the result as argument to `f` and return
-    * its result.
+  /** Program which executes `this` program, passes the result as argument to `f` and
+    * returns its result.
     */
   def map[B](f: A => B): Program2[B] =
     val self = this
@@ -35,8 +35,7 @@ trait Program2[A]:
     new Program2[B]:
       def execute(): B =
         val a = self.execute()
-        val pb = f(a)
-        pb.execute()
+        f(a).execute()
 
 object Program2:
   /** Executes given program. */
@@ -80,4 +79,4 @@ object Program2:
     collatz(n).flatMap { len => print(s"length($n)", len) }
 
   @main def entry21(): Unit =
-    run(collatzAndPrint(18))
+    run(collatzAndPrint(6))

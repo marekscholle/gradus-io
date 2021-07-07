@@ -1,9 +1,867 @@
 # Gradus ad IO Parnassum
+Author Marek Scholle <marekscholle@gmail.com>
+v0.1, 2021-06-26
+:source-highlighter: highlightjs
+:highlightjs-languages: scala, shell
+:sectanchors:
+:icons: font
+:toc: left
+:sectnums:
+:toclevels: 4
+:docinfo: shared
+:!webfonts:
+:stem: latexmath
 
-Test https://asciidoctor.org/[Asciidoctor] text.
+This is my attempt to introduce IO monad programming for those
+who never heard about it.
+Unlike material I myself found when I first met the concept,
+this does not try to "`sell`" it from the beginning
+as purely functional, referentially transparent solution,
+but rather as a smart way to organize computation,
+to get concurrent execution of subprograms virtually for free
+and without magic, and to avoid stack overflows.
+
+The language I choose for presenting ideas is
+https://www.scala-lang.org[Scala 3], which is one of JVM languages.
+I intentionally avoid using advanced Scala feautures and syntax sugar
+(like
+https://docs.scala-lang.org/tour/for-comprehensions.html[for comprehension]
+or https://docs.scala-lang.org/tour/by-name-parameters.html[by-name parameters]),
+so that even a reader without prior knowledge will understand.
+
+## Prerequsities
+
+It is supposed that a reader already knows basics of generic Java-like
+OOP typed programming
+(classes, instances, functions, generics) and the term _interface_
+as prescription of functionality which must be implemented
+by type implementing the interface.
+Classic example:
 
 [source, scala]
 ----
-trait Runnable:
+trait Animal:
+  def name: String
+  def makeSound: String
+  def introduceSelf(): Unit =
+    println(s"Hi! I'm $name and I do '$makeSound'!")
+----
+
+NOTE: https://docs.scala-lang.org/tour/traits.html[Traits] are
+similar to Java interfaces.
+Returning `Unit` is a Scala's way of saying "`return nothing`",
+like `void` in C++ or Java. The `Unit` is the 0-tuple type,
+and its only instance has a special (natural) notation: `()`.
+I some sense it is an equavilent of Python's `None` –
+if you specify that a function returns `Unit`,
+you don't need to return `()` explicitely,
+it is returned automatically.
+
+Any (concrete) type implementing `Animal` trait has to implement
+methods `name` and `makeSound`, and the method `introduceSelf`
+is (by default) implemented in terms of these two methods.
+One way to get an instance of `Animal` is to define _anonymous_
+implementation:
+
+[source, scala]
+----
+val bob = new Animal:
+  def name: String = "Bob"
+  def makeSound: String = "Woof"
+----
+
+If we run `bob.introduceSelf()`, we will get `Hi! I'm Bob and I do 'Woof'!`
+in the console.
+
+As this runs in JVM, we mostly don't care about object lifecycles;
+as long as we can reach an object (through chain of references)
+it lives on the heap.
+
+### Sealed traits
+
+In the text we will use one convenience of Scala language: _sealed traits_.
+Marking an interface as _sealed_ tells the compiler there will be no other
+implementations than those provided in the same file:
+
+[source, scala]
+----
+/** Skeleton of naive implementation of generic `Option` type with
+  * two variants: empty ([[None]]) and present ([[Some]]).
+  * No one outside the file can extend `Option[A]`.
+  */
+sealed trait Option[A]
+  def get: A
+  def map(f: A => B): Option[B]
+
+object Option:
+  case class None[A]() extends Option[A]
+    def get: A = throw NoSuchElementException
+    def map(f: A => B): None[B] = None()
+
+  case class Some[A](value: A) extends Option[A]
+    def get: A = value
+    def map(f: A => B): Some[B] = Some(f(value))
+----
+
+The benefit is that if we have an instance `opt` of type `Option[A]`,
+the compiler knows what are all possible variants and provides us a way to
+do complete _pattern matching_ on the instance:
+
+[source, scala]
+----
+opt match
+  case Some(value) => // handle the "present" case
+  case None        => // handle the "empty" case
+----
+
+### Tail recursion
+
+If you don't know what it is, let's start with a simple recursive function
+which sums integers from 1 to `n`:
+
+[source, scala]
+----
+def sum(n: Int): Int =
+  assert(n >= 0)
+  if (n == 0) 0
+  else n + sum(n - 1)
+----
+
+If we run `sum(1_000_000)` we get stack overflow –
+when executing `sum` for an `n > 0`,
+the compiler must first create a stack frame to compute
+`sum(n - 1)` and _only then_ it can add `n` and return.
+The  important thing here is that there is a work to do
+_after_ the recursive call.
+
+On the contrary, the program
+
+[source, scala]
+----
+def helloWorldForever(): Nothing
+  println("Hello, world")
+  helloWorldForever()
+----
+
+will (in Scala) not cause stack overflow: the compiler is smart
+enough to see that it can _reuse_ the stack frame for `helloWorldForever`
+for another call of it.
+
+Scala has a special annotation for checking that a recursive function
+boiles down to a tail-recursive one: `@tailrec`.
+If we apply this annotation to our `sum` example,
+we get a compilation error:
+
+[source, text]
+----
+@tailrec def sum(n: Int): Int =
+  if (n == 0) 0
+  else (n + sum(n - 1))
+          ^
+error: could not optimize @tailrec annotated method sum: it contains
+a recursive call not in tail position
+----
+
+Tail-recursion is good: it is cheaper than the usual one
+and we don't risk stack overflows.
+It is a viable replacement for imperative loops:
+
+[source, scala]
+----
+def imperativeSum(n: Int) =
+  var acc = 0
+  (1 to n).forEach { i => acc += i }
+  acc
+----
+
+is better written (without any mutation)
+
+[source, scala]
+----
+def sum(n: Int) =
+  @tailrec
+  def loop(n: Int, acc: Int) =
+    if (n == 0) acc
+    else loop(n - 1, n + acc)
+  loop(n, 0)
+----
+
+The trick to turn an imperative loop to `@tailrec` recursion
+by making local mutable variable a helper `@tailrec` function parameter
+is not uncommon, but requires some practise.
+
+
+## Gradus ad `Program`
+
+We start with a question how we can represent a _program_ in our code.
+This may raise questions
+
+* Why we would do that?
+* What's wrong with writing of program starting from main function
+and calling other functions?
+* What's the difference between a function (like the main one) and
+your  "`program`"?
+
+Of course, there is nothing wrong with code starting from main function
+and calling other functions.
+But as we will see, formulating what is a "`program`" will provide us
+some non-trivial benefits; it will provide us a way to _implement_ some
+concepts that usually must be provided by language itself
+(and often are not).
+
+### Step No. 1
+
+Our first attempt to represent an executable piece of code may look like this:
+
+[source, scala]
+----
+trait Program1:
   def execute(): Unit
 ----
+
+`Program1` is a minimal version of _program_ which does not take any arguments
+and returns nothing.
+It is the same as Java's
+https://docs.oracle.com/en/java/javase/16/docs/api/java.base/java/lang/Runnable.html[
+`Runnable`],
+people coming from C background would maybe call this a _callback_ type
+as this type is a natural candidate for callbacks fired when something happens.
+
+As it does return nothing, it is not much useful.
+The only thing we can do is a primitive chain operation:
+
+[source, scala]
+----
+trait Program1:
+  def execute(): Unit // abstract
+
+  /** Program which first executes `this` program
+    * and then the `that` program.
+    */
+  def andThen(that: Program1): Program1 =
+    val self = this
+    new Program1:
+      def execute(): Unit =
+        self.execute()
+        that.execute()
+----
+
+So, given two programs `p` and `q`, we can easily create a program which
+sequentially executes both: `p.andThen(q)`. We can pass an instance of
+`Program1` as argument to some function which may (and may not)
+execute the piece of code suspended in `execute` method.
+(This what you do in Java when you pass a `Runnable` instance
+to `Thread` constructor.)
+
+It is worth noting that the requirement that `Program1` does not
+accept any arguments does not limit us: we can capture ("`bake`")
+whatever we want into an instance of `Program1` like this:
+
+[source, scala]
+----
+val a = 1
+val b = 2
+val program = new Program1:
+  def execute(): Unit =
+    // the references to `a` and `b` are captured into this
+    // anonymous `Program1`'s state, so we can refer to them
+    // as if with `this.a` and `this.b`
+    println(s"$a + $b = ${a + b}")
+----
+
+It is generally useful to ask what is a minimal example of interfaces
+we meet: for a set, it would be an empty set, for `Program1`, it is
+a program which accepts nothing, does nothing and returns nothing
+(which means compiler will rewrite it to return `()`):
+
+[source, scala]
+----
+val doNothing = new Program1:
+  def execute(): Unit = {}
+----
+
+### Step No. 2
+
+The (obvious) problem is that we `execute` a `Program1` just
+for its _side effect(s)_: sure, we can print its result to console,
+to file, to database, or to save it to some agreed-before piece of memory,
+but of course this is clumsy.
+The natural thing to do is to make the program generic in its _return type_:
+
+[source, scala]
+----
+trait Program2[A]:
+  def execute(): A
+----
+
+This is much better.
+As before, we don't need `Program2` to accept arguments for `execute` method
+as we can bake whatever we need directly into instance of `Program2`.
+The difference is that the execution of program now has means
+to return its result without modifying external world.
+Please note that `Program2` is a direct generalization of `Program1`
+which is the same as `Program2[Unit]`.
+
+Let's examine what we can do with `Program2`.
+As we now have a meaningful result of execution,
+we can create a new program by remaping the result of another one:
+
+[source, scala]
+----
+trait Program2[A]:
+  def execute(): A // abstract
+
+  /** Program which executes `this` program, passes the result
+    * as argument to `f` and returns its result.
+    */
+  def map[B](f: A => B): Program2[B] =
+    val self = this
+    new Program2[B]:
+      def execute(): B =
+        val a = self.execute()
+        f(a)
+----
+
+Hence, given a function `f: A \=> B`, we can easily transform
+a `Program2[A]` to `Program2[B]`
+by applying `f` on the result of the former one.
+(Note that `Program2[A].map[B]` only schedules this operation for execution
+when the resulting program is executed, it does not call it itself.)
+In other words (more elaborately), `map` is an operation which takes
+a `Program2[A]` (implicit `this`), a function `A \=> B` and returns
+`Program2[B]`.
+
+So far we have not done anything surprising or unclear:
+we just have crafted an interface (`Program2`) to wrap
+a function (`execute`) with baken-into arguments,
+with convenient syntax to apply a transformation on the result (`map`).
+Now we will introduce first non-obvious thing:
+if we substitute `B === Program[C]` in `map[B](f: A \=> B)`,
+we meet a type for a _program producing another program_
+since the return type of `map(f: A \=> Program[C])` is `Program[Program[C]]`.
+
+Not suprisingly, `Program[Program[C]]` belongs
+to "`family`" of programs producing a `C`.
+
+NOTE: If you know `Future[A]` (or `Promise<A>` in Javascript),
+an analogy is at hand: `Future[A]` is a "`container for future value`",
+or a "`value that will be known in some point in the future`".
+The type `Future[Future[A]]` thus represents a "`future value in some point
+in the future`", which is still a value in future (with some known
+intermediate step).
+
+The proof of this claim is a function which takes a `Program2[Program2[A]]`
+and returns a `Program2[A]`; a function of "`shape`" `F[F[A]] \=> F[A]`
+is usually called `flatten`.
+The implementation is trivial and is in fact the _only possible_ implementation:
+
+[source, scala]
+----
+// free-standing function, not part of `trait Program2[A]`
+def flatten(program: Program2[Program2[A]]): Program2[A] =
+  new Program2[A]:
+    def execute(): A =
+      program.execute().execute()
+----
+
+In words: to produce an `A` from `Program2[Program2[A]]`,
+we must execute the outer `Program2` to get (inner) `Program2[A]`
+which we then execute to get wanted `A`.
+
+It is now only an intelectual curiosity to produce a program producing
+program, but soon we will see how useful this is. Usually we don't
+write `flatten(program.map(f))`, where `program` is a `Program2[A]`
+and `f` is an `A \=> Program[B]`, but use map and flatten in a single
+step called `flatMap`:
+
+[source, scala]
+----
+trait Program2[A]:
+  def execute(): A
+
+  /** Program which first executes `this` program and passes the result
+    * as argument to `f` to obtain another program which is then executed
+    * and its result returned.
+    */
+  def flatMap[B](f: A => Program2[B]): Program2[B] =
+    val self = this
+    new Program2[B]:
+      def execute(): B =
+        val a = self.execute()
+        f(a).execute()
+----
+
+Please note this is in fact _the_ direct transformation of `andThen` from
+`Program1` (with regard to generalization of `Program1` to `Program2[A]`):
+just with `Program2[A]` we can use the result of the first
+program to _create_ the second one; in other words, "`bake`" the result
+of the first program into the second one as additional argument
+(known only after first program has been executed and its result is known).
+
+As with `Program1`, it is good to ask what is the minimal
+implementation of `Program2[A]`. It is the program which just returns
+a value which we already know (again, `ready[Unit]` is equavalent to
+``Program1``'s `doNothing`):
+
+[source, scala]
+----
+def ready[A](a: A): Program2[A] =
+  new Program2[A]:
+    def execute(): A = a
+----
+
+Now it is worth noting that when we have `flatMap` operation
+and the `ready` factory,
+we implement `map` operation in terms of these two:
+the equivalence is
+
+[source, scala]
+----
+program.map(f) === program.flatMap { x => ready(f(x)) }
+----
+
+(Please reread the contracts of `map`, `flatMap` and `ready` to confirm
+this is not a lie.)
+I intentionally use the term _equivalence_ to avoid confusion with _equality_,
+the left hand and right hand expressions represent the same logical programs,
+but are not equal as object instances.
+
+#### Example
+
+Let us write a simple program using our `Program2`.
+As an example we take a well known recursive
+problem
+(https://en.wikipedia.org/wiki/Collatz_conjecture[Collatz conjecture])
+which goes this way: given a positive number stem:[n],
+if it is odd, mutliply it by 3 and add 1
+(hence the name _stem:[3n + 1] problem_) and repeat,
+if it is even, divide by 2 and repeat.
+The Collatz conjecture states that for every starting stem:[n],
+you will eventually reach the cycle stem:[1, 2, 4].
+Let's implement a program which, for given stem:[n],
+computes the number of steps until the sequence reaches 1.
+(Example: for stem:[n = 6], the sequence is stem:[3, 10, 5, 16, 8, 4, 2, 1]
+and hence the result is 8).
+
+[source, scala]
+----
+def collatz(n: BigInt): Program2[BigInt] =
+  new Program2[BigInt]:
+    def execute(): BigInt =
+      if (n == 1) 0
+      else
+        val c =
+          if (n % 2 == 0) collatz(n / 2)
+          else collatz(3 * n + 1)
+        c.map(_ + 1).execute()
+----
+
+To check the result of this program, let's introduce another program
+for printing a labeled value:
+
+[source, scala]
+----
+def print[A](label: String, a: A): Program2[Unit] =
+  new Program2[Unit]:
+    def execute(): Unit =
+      println(s"$label: $a")
+----
+
+The program which, for given stem:[n], computes the lenght of
+stem:[3n + 1] sequence and prints its length, is
+
+[source, scala]
+----
+def collatzAndPrint(n: BigInt): Program2[Unit] =
+  collatz(n).flatMap { len => print(s"length($n)", len) }
+----
+
+When we `execute` the program `collatzAndPrint(8)`,
+we will see `length(6): 8` as expected.
+As you can observe (or verify),
+this implementation extensively uses stack
+(you would need to find a very large stem:[n] to overflow the stack though).
+Moreover, the implementation is hardly in any sense better than plain
+
+[source, scala]
+----
+def collatz(n: BigInt): BigInt =
+  if (n == 1) 0
+  else
+    val c =
+      if (n % 2 == 0) collatz(n / 2)
+      else collatz(3 * n + 1)
+    c + 1
+----
+
+### Step No. 3
+
+Let summarize what we have in single listing.
+(We delegate `flatMap` to a free-standing function in companion object
+which acts as namespace so that `ready` and `flatMap` are both
+free-standing functions.)
+The `map` operation is implemented in terms
+of `ready` and `flatMap`; it is not treated as "`a primitive`" operation.
+
+[source, scala]
+----
+trait Program3[A]:
+  def execute(): A
+
+  def map[B](f: A => B): Program3[B] =
+    flatMap { a => Program3.ready(a) }
+
+  def flatMap[B](f: A => Program3[B]): Program3[B] =
+    Program3.flatMap(this, f)
+
+object Program3:
+  def ready[A](a: A): Program3[A] =
+    new Program3[A]:
+      def execute(): A = a
+
+  def flatMap[A, B](
+      program: Program3[A],
+      f: A => Program3[B],
+  ): Program3[B] =
+    new Program3[B]:
+      def execute(): B =
+        f(program.execute()).execute()
+
+  def flatten[A](program: Program2[Program2[A]]): Program2[A] =
+    // `identity` is the generic identity function function x |-> x
+    program2.flatMap(identity)
+----
+
+We already have much than one might expect,
+but the question if it is useful is still not answered.
+The basic problem is that we force `Program3` to provide `execute`
+method, and once we call it,
+the program has no option but to do everything it can to produce
+the output, blocking the thread and growing the stack during its execution.
+It is nothing more than just a funny form of normal functions,
+we only bake arguments into instances of `Program2` (usually anonymous)
+and name the function call as `execute`.
+
+To see benefits of such programs, we must do one non-obvious step
+(maybe surprising for those from OOP world):
+remove the `execute` method from the interface and thus _relieve_ programs
+from the concern of their _execution_.
+Note we started with `Program1` which had nothing but `execute`,
+and now we remove this `execute` from the interface and
+are finding something which will drive programs execution:
+the _interpreter_.
+(I used the term _interpreter_ to avoid confusion
+with threading task scheduling mechanisms called _executors_.)
+
+### Step No. 4
+
+So we remove `execute` from `Program3` and get
+
+[source, scala]
+----
+sealed trait Program[A]:
+  def map[B](f: A => B): Program[B] =
+    flatMap { a => Program.ready(a) }
+  def flatMap[B](f: A => Program[B]): Program[B] =
+    Program.FlatMap(this, f)
+
+object Program:
+  /** Program which returns an already existing value. */
+  private case class Ready[A](a: A) extends Program[A]
+
+  /** Program which (when interpreted) executes the `program`,
+    * applies `f` on its result to get an another program, runs it
+    * and returns its result.
+    */
+  private case class FlatMap[A, B](
+      program: Program[A],
+      f: A => Program[B],
+  ) extends Program[B]
+----
+
+Note that we now don't have anything to do in `flatMap`
+implementation, so we just _save_ the parameters to a (named) case
+of `Program[A]` in the hope that something (interpreter)
+will use it when executing the program.
+I use `private` for the cases to denote that a client shall
+use factories to create ``Program``s, and not refer to
+concrete implementations directly.
+
+As before, we have the minimal implementation of `Program[A]`:
+
+[source, scala]
+----
+def ready[A](a: A): Program[A] = Ready(a)
+----
+
+With what we already have, let's prepare two other factories for ``Program``s:
+
+[source, scala]
+----
+def suspend[A](f: () => A): Program[A] =
+  ready(()).map(f)
+----
+
+This factory _suspends_ the supplied function into a `Program[A]`,
+when the program is executed (by interpreter),
+the result of the suspended function is used as the result of the program.
+
+[source, scala]
+----
+def defer[A](f: () => Program[A]): Program[A] =
+  ready(()).flatMap(f)
+----
+
+This factory suspends the supplied function which produces a program.
+When the the result of `defer` is executed (by interpreter), we first
+run the function `f` to obtain a program which is executed next
+to obtain the program result.
+
+Please note that no one requires (and has any means to force) that
+parameters of `map` and `flatMap` do not do any side effects,
+on the contrary it very common (especially in `flatMap` or `defer`)
+to do them.
+
+### Naive interpreter for `Program`
+
+Let's write _some_ interpreter for `Program[A]` just to prove that
+by removing `execute` from `Program` interface we lose nothing:
+
+[source, scala]
+----
+def run1[A](program: Program[A]): A =
+  program match
+    case Ready(a) =>
+      a
+
+    case FlatMap(program1, f) =>
+      val a1 = run1(program1) // not a tail call
+      val program2 = f(a1)
+      run1(program1)
+----
+
+Note this is a trivial straightforward implementation,
+driven by types. You can't do anything else with a `Program`
+passed as argument than pattern-match it.
+If it is a `Ready[A](a)`, the situation is trivial.
+If it is a `FlatMap[B, A](program1, f)` for some type `B`,
+a natural thing to do is to execute `program1: Program2[B]` to get a `B`,
+apply `f` to get `program2: Program2[A]` and execute it to get `A`.
+
+Let's test our Collatz program against this interpreter:
+
+[source, scala]
+----
+def collatz(n: BigInt): Program[BigInt] =
+  Program.defer { () =>
+    if (n == 1) Program.ready(0)
+    else {
+      if (n % 2 == 0) collatz(n / 2).map(_ + 1)
+      else collatz(3 * n + 1).map(_ + 1)
+    }
+  }
+
+def printResult(n: BigInt) = suspend { () =>
+  println(s"Result: $n")
+}
+
+run1(collatz(6).flatMap(printResult))
+----
+
+outputs:
+
+----
+Result: 8
+----
+
+If you inspect stack usage, you will see that execution of `collatz(6)`
+by `run1` needs about 10 stack frames.
+The reason is that during recursion we build a chain of ``Map``s:
+the `collatz(n)` gradually builds (from right) a program
+`ready(0).map(_ + 1)[\...].map(_ + 1)` which execution consumes a stack.
+Let's fix that.
+
+### Tail-recursive rewrite of naive interpreter
+
+It needs some experience to rewrite stack-consuming
+recursion to a tail-recursive one.
+I applied my experience to `run1` and admittedly, this was a quite hard nut.
+I finally and ended up with
+
+[source, scala]
+----
+sealed trait Todo[B]
+object Todo:
+  case class Done[B](b: B) extends Todo[B]
+  case class More[A, B](
+      program: Program[A],
+      todo: A => Todo[B],
+  ) extends Todo[B]
+
+@tailrec
+def loop2[A, B](program: Program[A], todo: A => Todo[B]): B =
+  import Todo._
+  program match {
+    case Ready(a) =>
+      todo(a) match {
+        case Done(b)             => b
+        case More(program, todo) => loop2(program, todo)
+      }
+
+    case FlatMap(program, f) =>
+      loop2(
+        program,
+        x => More(f(x), todo),
+      )
+  }
+
+def run2[A](program: Program[A]): A =
+  loop2(program, a => Todo.Done(a))
+----
+
+As it is usual, we delegate the implementation of function we want
+to make tail-recursive to a helper tail-recursive helper, here called
+`loop2`.
+(Note the `@tailrec` annotation which is here to make sure compiler
+will use tail call elimination.)
+The `todo` parameter is an accumulator of work "`to be done`".
+If we run our `collatz(n)` program against `run2` (with some debug logging),
+we will see that tail calls are really eliminated.
+Using `Program` with `run2` prevents stack overflows 🎉,
+so already we can get something non-trivial for free.
+
+Not so fast. We just moved to heap what previously was on stack,
+the problem with chained ``Map``s is not solved, only we can execute
+the problem without overflowing the stack.
+
+#### Example: compute parity of length of list
+
+We have a singly linked list, let's write a program which computes
+if its length is odd or even. A naive function version of this would be
+
+[source, scala]
+----
+/** Returns true if the `list` length is even. */
+def even[A](list: List[A]): Boolean =
+  list match
+    case head :: tail => odd(tail)
+    case Nil          => true
+
+/** Returns true if the `list` length is odd. */
+def odd[A](list: List[A]): Boolean =
+  list match
+    case head :: tail => even(tail)
+    case Nil          => false
+
+// use it
+val list: List[Int] = ???
+val hasEvenLength = even(list)
+----
+
+For larger lists, this will overflow the stack.
+`Program` version will not as the control is always passed back
+to interpreter before advancing to next step:
+
+[source, scala]
+----
+/** Returns true if the `list` length is even. */
+def even[A](list: List[A]): Program[Boolean] = defer { () =>
+  list match
+    case head :: tail => odd(tail)
+    case Nil          => true
+}
+
+/** Returns true if the `list` length is odd. */
+def odd[A](list: List[A]): Program[Boolean] = defer { =>
+  list match
+    case head :: tail => even(tail)
+    case Nil          => false
+}
+
+// use it
+val list: List[Int] = ???
+val hasEvenLength = run2(even(list))
+----
+
+The trick of not calling next step directly, but rather returning
+a description what is to be done next is called _trampolining_,
+and that's what our `run2` does. By representing the term _program_
+in code, we are a bit in the role of the programming language designer
+or compiler implementor.
+
+### Interpreter of `Program`
+
+I hope it is clear how `run2` implements a tail-recursive interpreter
+of ``Program``s with the help of `Todo` variants `Done` and `More`.
+But if we look more closely, there is a striking resemblance:
+`Done` is like `Ready` and `More` is like `FlatMap`!
+So we can rewrite `run2` to
+
+[source, scala]
+----
+@tailrec
+def run[A](program: Program[A]): A =
+  program match {
+    case Ready(a) =>
+      a
+
+    case FlatMap(program, f) =>
+      program match
+        case Ready(a) =>
+          run(f(a))
+
+        case FlatMap(program, g) =>
+          run(FlatMap(program, a => FlatMap(g(a), f)))
+  }
+----
+
+We could write this directly, but it might feel magic
+which is something I wanted to avoid.
+A bit of additional explanation:
+In `case FlatMap`, we inline former `loop2` into the case body,
+so pattern match on inner ``FlatMap``'s program.
+If the inner program is again a `FlatMap`, we move the function
+"`to the right`", removing one "`onion peel`" from the left, so that
+we can continue with execution with smaller program: the equavality
+here is
+
+[source, scala]
+----
+FlatMap[B, A](
+  FlatMap[C, B](
+    program: Program[C],
+    g: C => Program[B],
+  ),
+  f: B => Program[A],
+)
+  ===
+  FlatMap[C, A](program, c => FlatMap(g(c), f))
+----
+
+or written in dot-notation
+
+[source, scala]
+----
+// where
+val program: Program[C] = ???
+val g: C => Program[B] = ???
+val f: B => Program[A] = ???
+// equivalence
+program
+  .flatMap { c => g(c) }
+  .flatMap { b => f(b) }
+  ===
+  program.flatMap { c =>
+    g(c).flatMap { b => f(b) }
+  }
+----
+
+This is sometimes called the _associativy (monad) law_ since we can
+symbolically write equivalence
+
+[stem]
+++++
+\big[p \twoheadrightarrow \big(c \mapsto g(c)\big) \big] \twoheadrightarrow \big(b \mapsto f(b)\big) \equiv p \twoheadrightarrow \Big[ c \mapsto \Big(g(c) \twoheadrightarrow \big(b \mapsto f(b)\big)\Big) \Big]
+++++
+
+where stem:[\twoheadrightarrow] stands for `flatMap`
