@@ -829,13 +829,19 @@ here is
 ----
 FlatMap[B, A](
   FlatMap[C, B](
-    program: Program[C],
-    g: C => Program[B],
+    program, // Program[C]
+    g, // C => Program[B]
   ),
-  f: B => Program[A],
+  f, // B => Program[A]
 )
   ===
-  FlatMap[C, A](program, c => FlatMap(g(c), f))
+  FlatMap[C, A](
+    program, // Program[C]
+    h: (c: C) => FlatMap(
+      g(c), // Program[B]
+      f, // B => Program[A]
+    ),
+  )
 ----
 
 or written in dot-notation

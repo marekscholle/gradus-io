@@ -1445,13 +1445,19 @@ here is</p>
 <div class="content">
 <pre class="highlightjs highlight"><code class="language-scala hljs" data-lang="scala">FlatMap[B, A](
   FlatMap[C, B](
-    program: Program[C],
-    g: C =&gt; Program[B],
+    program, // Program[C]
+    g, // C =&gt; Program[B]
   ),
-  f: B =&gt; Program[A],
+  f, // B =&gt; Program[A]
 )
   ===
-  FlatMap[C, A](program, c =&gt; FlatMap(g(c), f))</code></pre>
+  FlatMap[C, A](
+    program, // Program[C]
+    h: (c: C) =&gt; FlatMap(
+      g(c), // Program[B]
+      f, // B =&gt; Program[A]
+    ),
+  )</code></pre>
 </div>
 </div>
 <div class="paragraph">
@@ -1487,7 +1493,7 @@ symbolically write equivalence</p>
 <div id="footer">
 <div id="footer-text">
 Version 0.1<br>
-Last updated 2021-07-07 22:36:59 +0200
+Last updated 2021-07-07 22:40:36 +0200
 </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.18.3/highlight.min.js"></script>
