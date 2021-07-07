@@ -847,13 +847,8 @@ val program: Program[C] = ???
 val g: C => Program[B] = ???
 val f: B => Program[A] = ???
 // equivalence
-program
-  .flatMap { c => g(c) }
-  .flatMap { b => f(b) }
-  ===
-  program.flatMap { c =>
-    g(c).flatMap { b => f(b) }
-  }
+program.flatMap { c => g(c) }.flatMap { b => f(b) }
+  === program.flatMap { c => g(c).flatMap { b => f(b) } }
 ----
 
 This is sometimes called the _associativy (monad) law_ since we can

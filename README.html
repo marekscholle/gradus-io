@@ -1464,13 +1464,8 @@ val program: Program[C] = ???
 val g: C =&gt; Program[B] = ???
 val f: B =&gt; Program[A] = ???
 // equivalence
-program
-  .flatMap { c =&gt; g(c) }
-  .flatMap { b =&gt; f(b) }
-  ===
-  program.flatMap { c =&gt;
-    g(c).flatMap { b =&gt; f(b) }
-  }</code></pre>
+program.flatMap { c =&gt; g(c) }.flatMap { b =&gt; f(b) }
+  === program.flatMap { c =&gt; g(c).flatMap { b =&gt; f(b) } }</code></pre>
 </div>
 </div>
 <div class="paragraph">
@@ -1492,7 +1487,7 @@ symbolically write equivalence</p>
 <div id="footer">
 <div id="footer-text">
 Version 0.1<br>
-Last updated 2021-07-07 22:35:27 +0200
+Last updated 2021-07-07 22:36:59 +0200
 </div>
 </div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.18.3/highlight.min.js"></script>
