@@ -861,8 +861,7 @@ symbolically write equivalence
 
 [source, scala]
 ----
-[p >>= (c -> g(c))] >>= (b -> f(b)) ===
-        p >>= [c -> (g(c) >>= (b -> f(b)))]
+[p >>= (c -> g(c))] >>= (b -> f(b)) === p >>= [c -> (g(c) >>= (b -> f(b)))]
 ----
 
-where `>>=` stands for `flatMap`
+where `>>=` stands for `flatMap`.
