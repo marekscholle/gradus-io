@@ -49,7 +49,7 @@ object Program:
 
   sealed trait Todo[A]
   object Todo:
-    case class Done[A](a: A) extends Todo[A]
+    case class Done[A](value: A) extends Todo[A]
     case class More[A, B](
         program: Program[A],
         todo: A => Todo[B],

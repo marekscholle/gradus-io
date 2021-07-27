@@ -136,8 +136,8 @@ which sums integers from 1{nbsp}to{nbsp}``n``:
 
 [source, scala]
 ----
-def sum(n: Int): Int = // `n` is supposed to be >= 0
-  if (n == 0) 0
+def sum(n: Int): Long = // `n` is supposed to be >= 0
+  if (n == 0) 0L
   else sum(n - 1) + n
 ----
 
@@ -219,16 +219,16 @@ We start with a question how we can represent a{nbsp}__program__ in our code.
 This may raise questions
 
 * Why we would do that?
-* What's wrong with writing programs starting from main function
+* What's wrong with writing programs starting from the main function
 and calling other functions?
 * What's the difference between a{nbsp}function (like the main one) and
 your  "`program`"?
 
-Of course, there is nothing wrong with code starting from main function
+Of course, there is nothing wrong with code starting from the main function
 and calling other functions.
 But as we will see, formulating what is a "`program`" will provide us
 some non-trivial benefits; it will provide us a{nbsp}way to _implement_ some
-concepts (like yielding or resources) that usually must be provided by language
+concepts (like _yield_ or _resources_) that usually must be provided by language
 itself (and often are not).
 
 ### Step No. 1
@@ -286,9 +286,8 @@ val b = 2
 // anonymous instance capturing local variables
 new Program1:
   def execute(): Unit =
-    // the references to `a` and `b` are captured into this anonymous
-    // `Program1`'s state, so we can refer to them as if with
-    // `this.a` and `this.b`
+    // the references to `a` and `b` are captured into this anonymous `Program1`'s
+    // state, so we can refer to them as if with `this.a` and `this.b`
     println(s"$a + $b = ${a + b}")
 ----
 
@@ -308,7 +307,7 @@ val dummy =
 
 The (obvious) problem is that we `execute` a{nbsp}``Program1`` just
 for its _side effect(s)_: sure, we can print its result to console,
-to file, to database, or to save it to some agreed-before piece of memory,
+to file, save to database or to some agreed-before piece of memory,
 but this is clumsy.
 A{nbsp}natural thing to do is to make the program _generic_ in its return type:
 
@@ -445,10 +444,10 @@ def pure[A](a: A): Program2[A] =
 ----
 
 (See how `pure[Unit](())` is the same as `dummy` for `Program1`.)
-Now it is worth noting that when we have `flatMap` operation
-and the `pure` factory,
+Now when we have `flatMap` operation and the `pure` factory,
 we can implement `map` operation in terms of these two:
-the equivalence is
+the intuition is that `flatMap` is a "`stronger`" operation.
+The equivalence is
 
 [source, scala]
 ----
@@ -591,8 +590,9 @@ Note we started with `Program1` which had nothing but `execute`,
 and now we remove this `execute` from the interface and
 are searching for something which will drive programs execution:
 the _interpreter_.
-(I{nbsp}use the term _interpreter_ to avoid confusion
-with threading task scheduling mechanisms called _executors_.)
+(I{nbsp}use the term _interpreter_ for the entity responsible for "`how`"
+to avoid confusion with threading task scheduling mechanisms
+called _executors_ which are responsible for "`where`".)
 
 ### Step No. 4
 
@@ -674,7 +674,7 @@ https://zio.dev[ZIO].
 Please note that there is no requirement (and also no way to enforce)
 that parameters of `map` / `delay` and `flatMap` / `defer`
 do not do any side effects when run;
-on the contrary it very common (especially in `flatMap` / `defer`)
+on the contrary it is very common (especially in `flatMap` / `defer`)
 to do them.
 
 ### Naive interpreter for `Program`
@@ -752,7 +752,7 @@ I{nbsp}finally ended up with
 ----
 sealed trait Todo[A]
 object Todo:
-  case class Done[A](a: A) extends Todo[A]
+  case class Done[A](value: A) extends Todo[A]
   case class More[A, B](
       program: Program[A],
       todo: A => Todo[B],
@@ -791,7 +791,7 @@ Not so fast. We just moved to heap what previously was on stack,
 the problem with chained ``Map``s is not solved, only we can run
 the program without overflowing the stack. The problem with chaining
 `map(_ + 1)` is inheretent, and problems like the Collatz's one are not
-good use cases for IO monad.
+good use cases for IO monad (naive implementation stays naive).
 Nevertheless, not all recursions are simple and the trade "`stack for heap`"
 done by `Program` may be handy.
 
@@ -1122,7 +1122,7 @@ def async[A](k: (A => Unit) => Unit): Program[A] = ???
 ----
 
 The ``k``'s type `(A \=> Unit) \=> Unit` looks scary, but it's not so bad:
-`async` accepts a{nbsp}function that _takes_ as argument
+`async` accepts a{nbsp}function that takes _as argument_
 a{nbsp}callback `cb: A \=> Unit` and does some effect.
 The _contract_ with a{nbsp}client of `async` is that{nbsp}``k``
 should start asynchronous operation which will produce an{nbsp}``A``
@@ -1174,7 +1174,7 @@ to case of `Program[A]`:
 case class Async[A](k: (A => Unit) => Unit) extends Program[A])
 
 // the factory for it
-def async[A](k: (A => Unit) => Unit): AsyncProgram[A] =
+def async[A](k: (A => Unit) => Unit): Program[A] =
   Async(k)
 ----
 
@@ -1212,7 +1212,7 @@ The own interpreter is just a{nbsp}consumer loop that takes ``Program``s
 from the queue and ``run``s it with `enqueue` being a{nbsp}function
 to append to the queue.
 This way client's code in{nbsp}``k`` enqueues the result of async operation
-to the interpreter loop without knowing about its implementation details.
+to the interpreter loop without knowing about it.
 This is how an implementation may look like:
 
 [source, scala]
@@ -1303,7 +1303,7 @@ until now we generally assume we are free or errors.
 
 Although this looks reasonable, there is a{nbsp}flaw:
 the resulting program has strange semantics!
-The `Future[A]` represents an{nbsp}already _running_ operation,
+The `Future[A]` represents an{nbsp}__already running__ operation,
 so when save the program `naiveFromFuture(future)` to variable
 and execute it multiple times,
 it will always complete with the same result
@@ -1400,7 +1400,7 @@ where:
 But what shall we do if a{nbsp}client breaks the contract
 and throws an exception of type{nbsp}``E1``
 in factory which returns `Z[R, E2, A]` (assuming ``E1`` is
-not{nbsp}a supertype of `E2`)?
+not{nbsp}a subtype of `E2`)?
 The authors of ZIO recommend to start (for those who are new to ZIO)
 with `ZIO[Any, Throwable, A]` (aliased `Task[A]`)
 which correspond to our `Program[A]` and most closely to `Future[A]`.
@@ -1412,7 +1412,7 @@ may be "`anything`" is very generic, but also means that you have
 no useful information about it to use.
 Hence `ZIO[Any, ?, ?]` means there is _some_ runtime for the program,
 but the proram itself can't use it
-(it can a{nbsp}``Unit`` which does not carry any useful stuff).
+(it can be a{nbsp}``Unit`` which does not carry any useful stuff).
 
 Back to our own `Program[A]`. I{nbsp}think it is sufficiently close
 to https://typelevel.org/cats-effect[Cats Effect]'s one that we can
@@ -1477,7 +1477,7 @@ object IO:
 ----
 
 Note that mature IO library will provide for example a{nbsp}factory
-for (asynchronous) sleep out of the box, but we can implement our own
+for non-blocking sleep out of the box, but we can implement our own
 in user code like this:
 
 [source, scala]
@@ -1503,13 +1503,16 @@ The module contains the definition of `IO` trait, its cases,
 and a{nbsp}single threaded interpreter; the file has less than 250 lines
 which is IMO very little concerning what it supports:
 
-* async operations with propagation of errors,
-* parallel execution of subprograms – if subprograms contain async steps,
-we have means to run those async steps in parallel,
-* recovering from errors,
+* way to plug-in asynchronous operations with propagation of errors
+(`IO.async` factory),
+* "`parallel`" execution of subprograms – if subprograms contain async steps,
+we have means to run those async steps in parallel
+(`io1.par(io2)`),
+* recovering from errors (`io.attempt`),
 * yielding, so users have control on execution and can yield
 from executing current program to give interpreter the opportunity
-to execute programs waiting in queue, e.g. those after an async step.
+to execute programs waiting in queue, e.g. those after an async step
+(`io.execYield`).
 
 We use tricks introduced in previous sections to implement such "`miracle`".
 I{nbsp}myself didn't look into implementation used in Cats Effects or ZIO,
@@ -1544,7 +1547,7 @@ It runs only if `acquire` succeeded.
 `acquire`, we don't have argument for `use`.)
 * `release` is a{nbsp}program for __releasing__ the resource;
 it runs only if `acquire` succeeded before
-(again, guaranteed by types)
+(again, "`if`" part guaranteed by types)
 and even if its usage failed (we must take care of this).
 
 The implementation can be very simple:
@@ -1562,7 +1565,7 @@ def programUsingResource[R, A](
         .attempt // catch potential failures in `use(r)`
         .flatMap {
           case Left(e) => // `use(r)` failed
-            release(r).attempt // release the resource
+            release(r) // release the resource
               .attempt // swallow potential errors while releasing
               *> raiseError(e) // re-raise the error
 
@@ -1585,8 +1588,10 @@ a{nbsp}specific structure's constructor & destructor.
 The Cats Effect library provides `Resource` class which provides nicer
 syntax and captures the concept more deeply:
 our intuition says resources should compose well,
-it should be possible to acquire them sequentially or in parallel.
-But this is out of scope of this text. IMO even our simple
+it should be possible to acquire them sequentially or in parallel;
+there are similar in some deeper sense with IO type itself.
+But this is out of scope of this text.
+IMO even our simple
 `programUsingResource` witnesses the strenght of IO concept:
 the resource handling in presence of erorrs is something
 very important and difficult, but with IO, we get a{nbsp}robust
