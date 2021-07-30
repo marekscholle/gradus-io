@@ -47,12 +47,11 @@ object AsyncProgram:
 
   def singleHttpRequest(uri: String): Program[Int] =
     async[Int] { cb =>
-      val client = HttpClient.newBuilder().build()
-      val request = HttpRequest
-        .newBuilder()
+      val client = HttpClient.newBuilder.build()
+      val request = HttpRequest.newBuilder
         .uri(URI.create(uri))
         .timeout(Duration.ofSeconds(10))
-        .GET()
+        .GET
         .build
 
       client

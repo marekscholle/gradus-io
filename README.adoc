@@ -308,7 +308,7 @@ val dummy =
 The (obvious) problem is that we `execute` a{nbsp}``Program1`` just
 for its _side effect(s)_: sure, we can print its result to console,
 to file, save to database or to some agreed-before piece of memory,
-but this is clumsy.
+but it is clumsy.
 A{nbsp}natural thing to do is to make the program _generic_ in its return type:
 
 [source, scala]
@@ -345,12 +345,12 @@ trait Program2[A]:
         f(a) // apply transformation to the result of the "outer" program
 ----
 
-Hence, given a{nbsp}function `f: A \=> B`, we can easily transform
+Hence, given a{nbsp}function `f: A \=> B`, we can transform
 a{nbsp}``Program2[A]`` to `Program2[B]`
 by applying `f` on the result of the former one.
 (Note that `Program2[A].map[B](f)` only plannes{nbsp}``f``'s execution
 when the resulting program is executed;
-the _creation_ of{nbsp}programs is without side effects.)
+the _creating_ of{nbsp}programs is without side effects.)
 In other words (more elaborately), `map` is an{nbsp}operation
 (generic in `A`,{nbsp}``B``) which takes
 a{nbsp}``Program2[A]`` (as implicit `this`),
@@ -474,7 +474,7 @@ if it is odd, mutliply it by{nbsp}3 and add{nbsp}1
 (hence the name `3n{nbsp}+{nbsp}1` _problem_) and repeat,
 if it is even, divide by{nbsp}2 and repeat.
 The Collatz conjecture states that for every starting{nbsp}``n``,
-you will eventually reach the cycle 1,{nbsp}4,{nbsp}2,{nbsp}1.
+we will eventually reach the cycle 1,{nbsp}4,{nbsp}2,{nbsp}1.
 Let's implement a{nbsp}program which, for given `n`,
 computes the number of steps until the sequence reaches{nbsp}1.
 (Example: for `n`{nbsp}={nbsp}6, the sequence is
@@ -791,7 +791,8 @@ Not so fast. We just moved to heap what previously was on stack,
 the problem with chained ``Map``s is not solved, only we can run
 the program without overflowing the stack. The problem with chaining
 `map(_ + 1)` is inheretent, and problems like the Collatz's one are not
-good use cases for IO monad (naive implementation stays naive).
+good use cases for IO monad (naive implementation stays naive,
+IO is not a{nbsp}rescue).
 Nevertheless, not all recursions are simple and the trade "`stack for heap`"
 done by `Program` may be handy.
 
@@ -799,7 +800,7 @@ done by `Program` may be handy.
 
 Let's write a{nbsp}program which computes if the{nbsp}length
 of singly linked list is odd or even.
-A{nbsp}function version of this would be
+A "`function`" version of this would be
 
 [source, scala]
 ----
@@ -1145,10 +1146,10 @@ def singleHttpRequest(uri: String): Program[Int] =
   async[Int] { cb =>
     val client = HttpClient.newBuilder().build() // make an HTTP client
     val request = HttpRequest // build a GET request to URI
-      .newBuilder()
+      .newBuilder
       .uri(URI.create(uri))
       .timeout(Duration.ofSeconds(10))
-      .GET()
+      .GET
       .build()
 
     client
@@ -1165,7 +1166,7 @@ know about the result
 (obviously by doing some side effect into interpreter state).
 
 Extending the `run` from previous section is now direct:
-we use now well-known trick to _save_ the argument of factory
+we use now well-known trick to save the argument of factory
 to case of `Program[A]`:
 
 [source, scala]
@@ -1367,7 +1368,7 @@ at least in Scala we don't have a{nbsp}way to ensure that a{nbsp}function
 will not throw so that if a{nbsp}client forgets to catch exceptions
 before returning control to interpreter, all bets are lost.
 
-This leads us to one more kind of programs: those that are "`raised`"
+This leads us to one more case of programs: those that are "`raised`"
 (errored) and instead of returning a{nbsp}value they carry
 the (exceptional) cause for failure:
 
@@ -1432,7 +1433,7 @@ sealed trait IO[+A]:
   /** Transforms the result of `this` with `f`. */
   def map[B](f: A => B): IO[B]
 
-  /** Ignores the result of `this` and replace it with `b`. */
+  /** Ignores the result of `this` and replaces it with `b`. */
   def as[B](b: B): IO[B]
 
   /** Uses the result of  this `f` to create a program to be run next. */
@@ -1524,7 +1525,7 @@ can be implemented in one self-contained type-safe module.
 ## Resource
 
 It is not obvious how to define a{nbsp}__resource__,
-it is much easier to say how a{nbsp}program using resource looks like:
+it is much easier to say how a _program using resource_ looks like:
 
 [source, scala]
 ----
